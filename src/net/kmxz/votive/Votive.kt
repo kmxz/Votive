@@ -18,9 +18,15 @@ class Votive<V: VAny, R: RAny> {
          * @param iterable Votives that awaits to be all-resolved
          * @return A new votive which will resolve after votives are resolved, or reject as soons as one votive rejects
          */
-        fun <Vstatic: VAny, Rstatic: RAny> all(iterable: Iterable<Votive<out Vstatic, out Rstatic>>) {
-
-        }
+        fun <Vstatic: VAny, Rstatic: RAny> all(iterable: Iterable<Votive<out Vstatic, out Rstatic>>): Votive<Iterable<Vstatic>, Rstatic> = Votive({ res, rej ->
+            iterable.forEach { single ->
+                single.thenSimple<Unit, Unit>({
+                    if (iterable.all { it.status is Status.Fulfilled }) {
+                        res(iterable.map { (it.status as Status.Fulfilled).value })
+                    }
+                }, rej)
+            }
+        })
 
         /**
          * Exactly similar as Promise.race in JavaScript
@@ -28,10 +34,11 @@ class Votive<V: VAny, R: RAny> {
          * @param iterable Votives that awaits to be resolved
          * @return A new votive which will resolve or reject as soon as one of the votives resolves or rejects
          */
-        fun <Vstatic: VAny, Rstatic: RAny> race(iterable: Iterable<Votive<out Vstatic, out Rstatic>>) {
-
-        }
-
+        fun <Vstatic: VAny, Rstatic: RAny> race(iterable: Iterable<Votive<out Vstatic, out Rstatic>>): Votive<Vstatic, Rstatic> = Votive({ res, rej ->
+            iterable.forEach { single ->
+                single.thenSimple<Unit, Unit>(res, rej)
+            }
+        })
         /**
          * Exactly similar as Promise.resolve in JavaScript
          *
@@ -69,9 +76,9 @@ class Votive<V: VAny, R: RAny> {
     }
 
     private class QueueItem<in Vin: VAny, in Rin: RAny, Vout: VAny, Rout: RAny> (
-        val outVotive: Votive<Vout, Rout>,
-        val onFulfilled: (Vin) -> Votive<out Vout, out Rout>,
-        val onRejected: (Rin) -> Votive<out Vout, out Rout>
+        private val outVotive: Votive<Vout, Rout>,
+        private val onFulfilled: (Vin) -> Votive<out Vout, out Rout>,
+        private val onRejected: (Rin) -> Votive<out Vout, out Rout>
     ) {
         fun resolveInternal(value: Vin) {
             notifyChained(onFulfilled(value))
@@ -81,12 +88,8 @@ class Votive<V: VAny, R: RAny> {
             notifyChained(onRejected(reason))
         }
 
-        private fun notifyChained(out: Votive<out Vout, out Rout>) {
-            out.thenSimple<Unit, Unit>({ vout ->
-                outVotive.resolveInternal(vout)
-            }, { rout ->
-                outVotive.rejectInternal(rout)
-            })
+        private fun notifyChained(result: Votive<out Vout, out Rout>) {
+            result.thenSimple<Unit, Unit>(outVotive::resolveInternal, outVotive::rejectInternal)
         }
     }
 
@@ -205,7 +208,7 @@ class Votive<V: VAny, R: RAny> {
      * @param onRejected Callback to execute when promise is rejected
      * @return a new promise, resolved with value returned from onRejected
      */
-    fun catchSimple(onRejected: (R) -> V): Votive<V, R> = thenSimple({ v -> v }, onRejected)
+    fun catchSimple(onRejected: (R) -> V): Votive<V, R> = thenSimple({ it }, onRejected)
 
     /**
      * Similar as Promise.prototype.catch in JavaScript, except that you cannot reject by throwing

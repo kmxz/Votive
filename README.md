@@ -4,9 +4,9 @@ Another promise library for Kotlin (on JVM).
 
 ## Motive
 
-- Only one existing promise [implementation](https://github.com/mplatvoet/kovenant) in Kotlin, which is quite complicated. In addition, it's API (naming, etc.) diverse too much from promise implementations in JavaScript.
+- Only one existing promise [implementation](https://github.com/mplatvoet/kovenant) in Kotlin, which is quite complicated. In addition, its API diverses too much from promise implementations in JavaScript.
 
-- Existing promise implementations on JVM kept the practice of "rejecting by throwing". This is, however, not favored.
+- Existing promise implementations on JVM followed the practice of "rejecting by throwing". This is, however, not favored (see "Differences from Promise/A+" section below).
 
 ## API (`Votive` class)
 
@@ -16,7 +16,7 @@ Class `Votive<V, R>` take two type parameters, where `V` is value type (when ful
 
 ### Constructor
 
-- `Votive(executor: (((V) -> Unit, (R) -> Unit) -> Unit))`. Exactly the same as `Promise` constructor in JavaScript, `executor` will take `resolve` and `response` functions as parameters.
+- `Votive(executor: (((V) -> Unit, (R) -> Unit) -> Unit))`. Exactly the same as `Promise` constructor in JavaScript.
 
 ### Static methods (in companion object)
 
@@ -37,15 +37,34 @@ Class `Votive<V, R>` take two type parameters, where `V` is value type (when ful
 
 Use "simple" methods is you are not rejecting anyway; use methods without "simple" if you may reject the promise by returning a rejected promise.
 
+## Example
+
+    fun setTimeout(runnable: () -> Unit, delay: Int) {
+        Thread {
+            Thread.sleep(delay.toLong())
+            runnable()
+        }.start()
+    }
+    
+    fun main(args : Array<String>) {
+        val p1 = Votive<String, String>({ res, rej -> setTimeout({ res("[p1]") }, 600) })
+        val p2 = Votive<String, String>({ res, rej -> setTimeout({ rej("[p2]") }, 1000) })
+        val p3 = Votive<String, String>({ res, rej -> setTimeout({ res("[p3]") }, 1800) })
+        val p4 = Votive<String, String>({ res, rej -> setTimeout({ res("[p4]") }, 200) })
+        Votive.race(listOf(p1, p2, p3, p4)).thenSimple(::println)
+        Votive.all(listOf(p1, p2, p3, p4)).thenSimple<Unit, Unit>(::println, ::println)
+        p3.then({ Votive.reject<String, String>("Oops") }).catchSimple { it + "Really?" }.thenSimple(::println)
+    }
+
 ## Differences from Promise/A+
 
-- As mentioned above, "rejecting by throwing" is not allowed. Any throws will not be caught. To reject, use [the skill](http://azu.github.io/promises-book/#not-throw-use-reject) of returning `Promise.reject(reason)` instead of `throw reason`. Reasons:
+- As mentioned above, "rejecting by throwing" is not allowed. Any throws will not be caught. To reject, use [the trick](http://azu.github.io/promises-book/#not-throw-use-reject) of returning `Promise.reject(reason)` instead of `throw reason`. Reasons:
   - In JVM, exceptions are expensive.
   - Unlike in JavaScript where anything can be thrown, JVM only allows throwing subclasses of `Throwable`.
   - If "rejecting by throwing" is used, the business logic (rejects) and software error (throws) are mixed together.
-  - If "rejecting by throwing" is used, the rejection callback (`onRejected`) have to take `Throwable` as parameter, instead of more specific types.
+  - If "rejecting by throwing" is used, the rejection callback (`onRejected`) has to take `Throwable` as parameter, instead of a more specific type.
 
-- The rule of "`onFulfilled` or `onRejected` must not be called until the execution context stack contains only platform code" will NOT be respected. Reasons:
+- The rule of "`onFulfilled` or `onRejected` must not be called until the execution context stack contains only platform code" will NOT be respected. They will be called immediately on the thread which resolve/reject is done.  Reasons:
   - It's caller's own responsibility to take care of executing order.
   - On JVM, there are no reliable way to put off callbacks appropriately without affecting portability.
 
