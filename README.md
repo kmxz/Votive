@@ -2,6 +2,18 @@
 
 Another promise library for Kotlin (on JVM).
 
+## Use
+
+Install via JitPack. For example, add dependency in `build.gradle`:
+
+    repositories {
+        maven { url 'https://jitpack.io' }
+    }
+    
+    dependencies {
+       compile 'com.github.kmxz:Votive:release-SNAPSHOT'
+    }
+
 ## Motive
 
 - Only one existing promise [implementation](https://github.com/mplatvoet/kovenant) in Kotlin, which is quite complicated. In addition, its API diverses too much from promise implementations in JavaScript.
